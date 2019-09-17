@@ -1,0 +1,466 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+'''
+within new urban bound is 1, outside is 0
+for batch 1 & 2, Result_grid2 are used
+'''
+from shutil import copyfile
+import itertools as iter
+import pandas as pd
+import numpy as np
+import re
+import string
+import processing
+import os
+import shutil
+import shapely
+import json
+import urllib
+import math
+from qgis.core import *
+from PyQt4.QtCore import QVariant
+from PyQt4.QtGui import QInputDialog
+from qgis.core import QgsMessageLog
+from PyQt4.QtGui import QInputDialog
+from PyQt4.QtGui import QColor
+
+def count_unique_poi2(filename, polygon,  points, alg="qgis:countuniquepointsinpolygon", save=False):
+    
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == False:
+        count_unique =  processing.runalg(alg, polygon, points, 'POI_ID', 'Resident',  None)
+        return processing.getObject(count_unique['OUTPUT'])
+    else:
+        processing.runalg(alg, polygon, points, 'POI_ID', 'Resident',  save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name,  provider_name)
+
+def union_load(filename, layer1, layer2, alg="qgis:union", save=False):
+    '''
+    #This is a warpper-function for "union"
+    '''
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        union = processing.runalg(alg, layer1, layer2, None)
+        return processing.getObject(union['OUTPUT'])
+    else:
+        processing.runalg(alg, layer1, layer2, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+def count_unique_poi(filename, polygon,  points, alg="qgis:countuniquepointsinpolygon", save=False):
+    
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == False:
+        count_unique =  processing.runalg(alg, polygon, points, 'POIID', 'NUMPOINTS',  None)
+        return processing.getObject(count_unique['OUTPUT'])
+    else:
+        processing.runalg(alg, polygon, points, 'POIID', 'NUMPOINTS',  save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name,  provider_name)
+
+def clip_load(filename, layer1, layer2, alg="qgis:clip", save=False) :
+    '''
+    #This is a warpper-function for "clip"
+    #if save =False， the output will be kept only in memory
+    #if save =True，  the output will be saved to OutputFile and added to the current panel
+    '''
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == True:
+        processing.runalg(alg, layer1, layer2, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)        
+        
+    else:
+        clip = processing.runalg(alg, layer1, layer2, None)
+        return processing.getObject(clip['OUTPUT'])
+
+def clip_saga(filename, layer1, layer2, alg="saga:polygonclipping", save=False) :
+    '''
+    #This is a warpper-function for "clip"
+    #if save =False, the output will be kept only in memory
+    #if save =True, the output will be saved to OutputFile and added to the current panel
+    '''
+    global OutputFile2
+    save_name = OutputFile2 + filename + ".shp"
+    
+    if save == True:
+        processing.runalg(alg, layer1, layer2, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)        
+        
+    else:
+        clip = processing.runalg("qgis:clip", layer2, layer1, None)
+        return processing.getObject(clip['OUTPUT'])
+
+def remove_null_load(filename, layer1, alg="qgis:removenullgeometries", save=False):
+    '''
+    #This is a warpper-function for "remove_null_geometries"
+    '''
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        remove = processing.runalg(alg, layer1, None)
+        return processing.getObject(remove['OUTPUT_LAYER'])
+    else:
+        processing.runalg(alg, layer1, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+        
+
+def dsv_load(filename, layer, field="new_id",alg="qgis:dissolve", save=False) :
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == True:
+        processing.runalg(alg, layer, 0, field, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)        
+        
+    else:
+        clip = processing.runalg(alg, layer, 0, field, None)
+        return processing.getObject(clip['OUTPUT'])
+
+def dsv_saga(filename, layer, field="city_fin",alg="saga:polygondissolvebyattribute", save=False) :
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == True:
+        processing.runalg(alg, layer, field, None, None, 0, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)        
+        
+    else:
+        clip = processing.runalg(alg, layer, field, None, None, 0, None)
+        return processing.getObject(clip['OUTPUT'])
+
+
+def area_cal(filename, layer, alg="qgis:fieldcalculator", save=False):
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save == True:
+        processing.runalg(alg, layer,"area",0,10,2,True,"$area/1000000",save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)        
+        
+    else:
+        area = processing.runalg(alg, layer,"area",0,10,2,True,"$area/1000000", None)
+        return processing.getObject(area['OUTPUT'])
+    
+
+def difference_load(filename, layer1, layer2, alg="qgis:difference", save=False) :
+    '''
+    #This is a warpper-function for "difference"
+    '''
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == True:
+        if int(layer2.featureCount())>0:
+             processing.runalg(alg, layer1, layer2, True, save_name)
+             data_source = save_name
+             layer_name = filename
+             provider_name = "ogr"
+             return iface.addVectorLayer(data_source, layer_name, provider_name)
+        else:
+             processing.runalg('qgis:clip', layer1, layer1, save_name)
+             data_source = save_name
+             layer_name = filename
+             provider_name = "ogr"
+             return iface.addVectorLayer(data_source, layer_name, provider_name)    
+    else:
+        if int(layer2.featureCount())>0:
+            diff = processing.runalg(alg, layer1, layer2, True, None)
+        else:
+            diff = processing.runalg('qgis:clip', layer1, layer1, None)
+        return processing.getObject(diff['OUTPUT'])
+
+def difference_saga(filename, layer1, layer2, alg="saga:difference", save=False) :
+    '''
+    #This is a warpper-function for "difference"
+    '''
+    global OutputFile2
+    save_name = OutputFile2 + filename + ".shp"
+    
+    if save == True:
+        if int(layer2.featureCount())>0:
+             processing.runalg(alg, layer1, layer2, 1, save_name)
+             data_source = save_name
+             layer_name = filename
+             provider_name = "ogr"
+             return iface.addVectorLayer(data_source, layer_name, provider_name)
+        else:
+             processing.runalg('saga:polygonclipping', layer1, layer1, save_name)
+             data_source = save_name
+             layer_name = filename
+             provider_name = "ogr"
+             return iface.addVectorLayer(data_source, layer_name, provider_name)    
+    else:
+        if int(layer2.featureCount())>0:
+            diff = processing.runalg('qgis:difference', layer1, layer2, True, None)
+        else:
+            diff = processing.runalg('qgis:clip', layer1, layer1, None)
+        return processing.getObject(diff['OUTPUT'])
+
+def multi_single(filename, layer, alg="qgis:multiparttosingleparts", save=False):
+    global OutputFile2
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        result = processing.runalg(alg, layer, None)
+        return processing.getObject(result['OUTPUT'])
+    else:
+        processing.runalg(alg, layer, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+def singlepart (filename, layer, field = 'citycode', alg="qgis:singlepartstomultipart", save=False):
+    global OutputFile2
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        result = processing.runalg(alg, layer, field, None)
+        return processing.getObject(result['OUTPUT'])
+    else:
+        processing.runalg(alg, layer, field, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+
+def join_load(filename, layer1, layer2,  predicate, alg='qgis:joinattributesbylocation', save=False):
+    '''
+    #This is a warpper-function for "join"
+    '''
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    
+    if save == False:
+        join = processing.runalg(alg, layer1, layer2, predicate, 0, 0, 'sum', 0, None)
+        return processing.getObject(join['OUTPUT'])
+    else:
+        processing.runalg(alg, layer1, layer2, predicate, 0, 0, 'sum', 0, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+def find_neighbor(layer, attr='id2'):
+    feature_dict = {f.id(): f for f in layer.getFeatures()}
+    index = QgsSpatialIndex()
+    for f in feature_dict.values():
+        index.insertFeature(f)
+    
+    layer.startEditing()
+    for f in feature_dict.values():
+        a = f[attr]
+        b = f['id2']
+        f[_NEW_ID] =f['id2']
+        layer.updateFeature(f)
+    
+    layer.commitChanges()
+    layer.startEditing()
+    for f in feature_dict.values():
+        geom = f.geometry()
+        intersecting_ids = index.intersects(geom.boundingBox())
+        neighbors = []
+        north =[]
+        south =[]
+        east =[]
+        west =[]
+        neighbors_sum = 0
+        for intersecting_id in intersecting_ids:
+            intersecting_f = feature_dict[intersecting_id]
+            if intersecting_f[attr] =='':
+                intersecting_f[_NEW_ID] =intersecting_f['id2']
+            else:
+                pass
+            # For our purpose we consider a feature as 'neighbor' if it touches or intersects a feature. We use the 'disjoint' predicate to satisfy
+            if (f != intersecting_f and not intersecting_f.geometry().disjoint(geom)):
+                neighbors.append(intersecting_f[attr])
+                if(intersecting_f["xmin"]==f["xmin"] and intersecting_f["ymin"]==f["ymax"]):
+                    north.append(intersecting_f[attr])
+                elif(intersecting_f["xmin"]==f["xmin"] and intersecting_f["ymax"]==f["ymin"]):
+                    south.append(intersecting_f[attr])
+                elif(intersecting_f["ymin"]==f["ymin"] and intersecting_f["xmin"]==f["xmax"]):
+                    west.append(intersecting_f[attr])
+                elif(intersecting_f["ymin"]==f["ymin"] and intersecting_f["xmax"]==f["xmin"]):
+                    east.append(intersecting_f[attr])
+        f[_NEW_NEIGHBORS_FIELD] = ','.join(neighbors)
+        f[_NEW_NORTH] = ','.join(north)
+        f[_NEW_SOUTH] = ','.join(south)
+        f[_NEW_SUM_FIELD] = len(north) + len(south) + len(east) + len(west)
+        f[_NEW_LEFT] = ','.join(east)
+        f[_NEW_RIGHT] = ','.join(west)
+        # Update the layer with new attribute values.
+        layer.updateFeature(f)
+        if (len(north) + len(south) + len(east) + len(west))==0:
+            if (len(north)==0 and intersecting_f["ymin"]==f["ymax"] and (f.geometry().area()*12321)<0.3):
+                north.append(intersecting_f[attr])
+            elif (len(south)==0 and intersecting_f["ymax"]==f["ymin"] and (f.geometry().area()*12321)<0.3):
+                south.append(intersecting_f[attr])
+            elif (len(west)==0 and intersecting_f["xmin"]==f["xmax"] and (f.geometry().area()*12321)<0.3):
+                west.append(intersecting_f[attr])
+            elif (len(east)==0 and intersecting_f["xmax"]==f["xmin"] and (f.geometry().area()*12321)<0.3):
+                east.append(intersecting_f[attr])
+            f[_NEW_NEIGHBORS_FIELD] = ','.join(neighbors)
+            f[_NEW_NORTH] = ','.join(north)
+            f[_NEW_SOUTH] = ','.join(south)
+            f[_NEW_SUM_FIELD] = len(north) + len(south) + len(east) + len(west)
+            f[_NEW_LEFT] = ','.join(east)
+            f[_NEW_RIGHT] = ','.join(west)
+            layer.updateFeature(f)
+        
+    
+    layer.commitChanges()
+
+def merge_grid(filename, layer, exp =u'"left_grid"is null', id="right_grid", thresh=0.33, save=False):
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save==False:
+        processing.runalg("qgis:selectbyattribute", layer, u'area', 4, thresh)
+        processing.runalg("qgis:selectbyexpression", layer, exp, 3)
+        feature_dict = {f.id(): f for f in layer.selectedFeatures()}
+        layer.startEditing()
+        for f in feature_dict.values():
+            geom = f.geometry()
+            if f[id] ==NULL:
+                pass
+            else:
+                new = f[id]
+                f[_NEW_ID] = new
+            
+            layer.updateFeature(f)
+        
+        layer.commitChanges()
+        layer.removeSelection()
+        layer2 = dsv_load(filename, layer)
+        layer3= area_cal(filename, layer2)
+        layer.removeSelection()
+        return processing.getObject(layer3['OUTPUT'])
+    else:
+        processing.runalg("qgis:selectbyattribute", layer, u'area', 4, thresh)
+        processing.runalg("qgis:selectbyexpression", layer, exp, 3)
+        feature_dict = {f.id(): f for f in layer.selectedFeatures()}
+        layer.startEditing()
+        for f in feature_dict.values():
+            geom = f.geometry()
+            new = f[id]
+            f[_NEW_ID] = new
+            layer.updateFeature(f)
+        
+        layer.commitChanges()
+        layer.removeSelection()
+        layer2 = dsv_load(filename, layer)
+        processing.runalg("qgis:fieldcalculator", layer2,"area",0,10,2,True,"$area/1000000",save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)  
+
+
+def convert_polygon(filename, layer, alg="qgis:convertgeometrytype", save=False):
+    global OutputFile2
+    save_name = OutputFile2 + filename + ".shp"
+    if save == False:
+        remove = processing.runalg(alg, layer, 4, None)
+        return processing.getObject(remove['OUTPUT_LAYER'])
+    else:
+        processing.runalg(alg, layer, 4, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+def check_validity(filename1, filename2, layer, alg="qgis:checkvalidity", save=False):
+    global OutputFile
+    save_name1 = OutputFile + filename1 + ".shp"
+    save_name2 = OutputFile + filename2 + ".shp"
+    if save == False:
+        remove = processing.runalg(alg, layer, 0, None, None, None)
+        return processing.getObject(remove['VALID_OUTPUT'])
+    else:
+        processing.runalg(alg, layer, 0, save_name1, save_name2, None)
+        data_source = save_name1
+        layer_name = filename1
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+        
+
+def go_polyline(filename, layer, alg= "grass7:v.build.polylines", save=False):
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        remove = processing.runalg(alg, layer, 0,"%f,%f,%f,%f" %(xmin, xmax, ymin, ymax), 0, 0.001, 3, None)
+        return processing.getObject(remove['OUTPUT_LAYE'])
+    else:
+        processing.runalg(alg, layer, 0, "%f,%f,%f,%f" %(xmin, xmax, ymin, ymax), 0, 0.001, 3, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+
+def sub_block(filename, layer, i, alg1="qgis:selectbyattribute", alg2="qgis:saveselectedfeatures", save=False):
+    global OutputFile
+    save_name = OutputFile + filename + ".shp"
+    if save == False:
+        processing.runalg(alg1, layer, u'citycode', 0, i)
+        sub = processing.runalg(alg2, layer, None)
+        layer.removeSelection()
+        return processing.getObject(sub['OUTPUT'])
+    else:
+        processing.runalg(alg1, layer, u'citycode', 0, i)
+        sub = processing.runalg(alg2, layer, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        layer.removeSelection()
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+
+def sub_block_urban(filename, layer, alg1="qgis:selectbyattribute", alg2="qgis:saveselectedfeatures", save=False):
+    global OutputFile
+    save_name = OutputFile2 + filename + ".shp"
+    if save == False:
+        processing.runalg(alg1, layer, u'urbanity', 0, 1)
+        sub = processing.runalg(alg2, layer, None)
+        layer.removeSelection()
+        return processing.getObject(sub['OUTPUT'])
+    else:
+        processing.runalg(alg1, layer, u'urbanity', 0, 1)
+        sub = processing.runalg(alg2, layer, save_name)
+        data_source = save_name
+        layer_name = filename
+        provider_name = "ogr"
+        layer.removeSelection()
+        return iface.addVectorLayer(data_source, layer_name, provider_name)
+
+#Reference files
+#df_map = pd.read_excel('C:\\Users\\base7005\\Documents\\Urban\\base\\CCE_2018W2UE_TrackingList.xlsx',sheetname="list18W2",encoding='gb18030',dtype={'citycode': np.str_, 'AD_CODE':np.str_})
