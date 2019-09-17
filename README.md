@@ -1,2 +1,2 @@
 # PYQGIS
-geographical Prep for map configration
+Geographical Prep for Map Configration
